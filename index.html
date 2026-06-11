@@ -1,267 +1,156 @@
 <!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Éditeur arbre JSON SENORIF</title>
-<style>
-body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#111}
-header{padding:10px;background:white;border-bottom:1px solid #ddd;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-button{padding:8px 10px;border:1px solid #ccc;border-radius:8px;background:white;font-weight:700}
-button.primary{background:#2563eb;color:white}
-.main{display:grid;grid-template-columns:300px 1fr 330px;height:calc(100vh - 58px)}
-.panel{background:white;padding:12px;border-right:1px solid #ddd;overflow:auto}
-.panel.right{border-left:1px solid #ddd;border-right:0}
-#canvas{position:relative;overflow:auto;background-image:linear-gradient(#e5e7eb 1px,transparent 1px),linear-gradient(90deg,#e5e7eb 1px,transparent 1px);background-size:24px 24px}
-#world{position:relative;width:2500px;height:1800px}
-.node{position:absolute;width:220px;min-height:70px;border:2px solid #2563eb;background:#eff6ff;border-radius:12px;padding:10px;box-shadow:0 3px 10px #0002;cursor:pointer;user-select:none}
-.node.result{border-color:#16a34a;background:#ecfdf5}
-.node.selected{outline:4px solid #fbbf24}
-.type{font-size:11px;font-weight:bold;color:#555;margin-bottom:5px}
-.title{font-weight:bold;font-size:13px;white-space:pre-wrap}
-.small{font-size:12px;color:#555;margin-top:5px}
-.edge{position:absolute;height:2px;background:#777;transform-origin:left center}
-.label{position:absolute;background:white;border:1px solid #ccc;border-radius:999px;padding:3px 8px;font-size:12px;font-weight:bold;cursor:pointer}
-textarea,input,select{width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:8px;padding:8px;font-family:inherit}
-textarea{min-height:90px}
-.json{font-family:monospace;font-size:12px;min-height:220px}
-label{font-size:13px;font-weight:bold;margin-top:10px;display:block}
-.help{font-size:12px;color:#555;line-height:1.35}
-</style>
+  <meta charset="utf-8">
+  <title>SenoRif - Éditeur JSON Simplifié</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; margin: 0; background: #f3f4f6; color: #1f2937; height: 100vh; overflow: hidden; }
+    #editor-col { width: 55%; padding: 20px; overflow-y: auto; }
+    #json-col { width: 45%; background: #1e293b; padding: 20px; display: flex; flex-direction: column; }
+    textarea.code { flex-grow: 1; width: 100%; background: #0f172a; color: #38bdf8; font-family: monospace; padding: 15px; border: none; border-radius: 8px; resize: none; outline: none; }
+    
+    .node-card { background: white; border-radius: 8px; padding: 15px; margin-top: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #3b82f6; }
+    .node-card.resultat { border-left-color: #10b981; background: #ecfdf5; }
+    .children-container { margin-left: 20px; padding-left: 15px; border-left: 2px dashed #cbd5e1; margin-top: 10px; }
+    
+    input, select { width: 100%; padding: 8px; margin: 5px 0 15px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box; }
+    button { background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    button:hover { background: #2563eb; }
+    button.danger { background: #ef4444; padding: 4px 8px; font-size: 12px; }
+    button.add { background: #10b981; margin-top: 5px; }
+    
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    h3, h4 { margin: 0 0 10px 0; }
+  </style>
 </head>
 <body>
-<header>
-<strong>Éditeur arbre JSON SENORIF</strong>
-<button onclick="addQuestion()">+ Question</button>
-<button onclick="addResult()">+ Résultat</button>
-<button onclick="toggleConnect()">Relier deux nœuds</button>
-<button class="primary" onclick="exportJSON()">Exporter JSON</button>
-<button onclick="loadExample()">Charger exemple</button>
-<button onclick="saveLocal()">Sauver local</button>
-<button onclick="loadLocal()">Recharger local</button>
-</header>
 
-<div class="main">
-<div class="panel">
-<p class="help">
-<b>Mode d'emploi :</b><br>
-1. Clique sur un nœud pour le modifier.<br>
-2. Glisse un nœud pour le déplacer.<br>
-3. Pour relier : bouton “Relier”, puis clique parent puis enfant.<br>
-4. Clique sur une étiquette de branche pour modifier la réponse.
-</p>
+  <div id="editor-col">
+    <h2 style="margin-top:0;">Créateur d'Arbre SenoRif</h2>
+    <p style="font-size: 14px; color: #4b5563;">Générateur de formulaire dynamique. Les modifications apparaissent directement dans le JSON.</p>
+    <div id="tree-root"></div>
+  </div>
 
-<label>Importer fichier JSON</label>
-<input type="file" id="fileInput" accept=".json">
+  <div id="json-col">
+    <h2 style="color: white; margin-top: 0;">Fichier JSON généré</h2>
+    <textarea id="json-output" class="code" readonly></textarea>
+  </div>
 
-<label>Ou coller JSON</label>
-<textarea id="pasteBox" class="json"></textarea>
-<button onclick="importPasted()">Importer JSON collé</button>
+  <script>
+    // État initial de l'arbre
+    let treeData = {
+      type: "decision",
+      marqueur: "Carcinome",
+      titre: "Quel est le type de carcinome ?",
+      choix: {}
+    };
 
-<h3>Nœuds</h3>
-<div id="list"></div>
-</div>
-
-<div id="canvas">
-<div id="world"></div>
-</div>
-
-<div class="panel right">
-<h3>Édition</h3>
-<div id="editEmpty">Clique sur un nœud ou une branche.</div>
-
-<div id="nodeEdit" style="display:none">
-<label>Type</label>
-<select id="editType" onchange="updateNode()">
-<option value="question">question</option>
-<option value="resultat">resultat</option>
-</select>
-
-<label>Question / titre</label>
-<textarea id="editTitle" oninput="updateNode()"></textarea>
-
-<label>Données résultat JSON</label>
-<textarea id="editData" class="json" onchange="updateNodeData()"></textarea>
-
-<button onclick="deleteNode()" style="margin-top:8px;color:#b91c1c">Supprimer ce nœud</button>
-</div>
-
-<div id="edgeEdit" style="display:none">
-<label>Réponse / branche</label>
-<input id="editEdgeLabel" oninput="updateEdge()">
-<button onclick="deleteEdge()" style="margin-top:8px;color:#b91c1c">Supprimer branche</button>
-</div>
-
-<h3>Aperçu JSON</h3>
-<textarea id="preview" class="json" readonly></textarea>
-</div>
-</div>
-
-<script>
-let nodes=[], edges=[];
-let selectedNode=null, selectedEdge=null;
-let connectMode=false, connectSource=null;
-let drag=null;
-
-function example(){
- return {
-  type:"question",
-  titre:"Type de cancer ?",
-  choix:{
-   "Triple négatif":{type:"resultat",donnees:{"Chimiothérapie":"1"},infos_science:{}},
-   "HER2+":{type:"resultat",donnees:{"Chimiothérapie + anti-HER2":"1"},infos_science:{}},
-   "RH+/HER2-":{
-    type:"question",
-    titre:"Patiente ménopausée ?",
-    choix:{
-     "Oui":{type:"resultat",donnees:{"Hormonothérapie":"1"},infos_science:{}},
-     "Non":{type:"resultat",donnees:{"Hormonothérapie + chimiothérapie":"1"},infos_science:{}}
+    function renderApp() {
+      const root = document.getElementById('tree-root');
+      root.innerHTML = '';
+      root.appendChild(createNodeElement(treeData));
+      updateJSON();
     }
-   }
-  }
- };
-}
 
-function uid(p){return p+Math.random().toString(36).slice(2,9)}
-function node(id){return nodes.find(n=>n.id===id)}
-function edge(id){return edges.find(e=>e.id===id)}
+    // Fonction récursive qui crée l'interface pour chaque nœud
+    function createNodeElement(node) {
+      const isResult = node.type === 'resultat';
+      const div = document.createElement('div');
+      div.className = 'node-card ' + (isResult ? 'resultat' : '');
 
-function treeToGraph(tree){
- nodes=[]; edges=[];
- let count=1;
- function walk(t,x,y,parent,label){
-  let id="n"+count++;
-  nodes.push({id:id,type:t.type||"question",titre:t.titre||"",donnees:t.donnees||{},infos_science:t.infos_science||{},x:x,y:y});
-  if(parent) edges.push({id:uid("e"),source:parent,target:id,label:label||"Réponse"});
-  if(t.type==="question" && t.choix){
-   let arr=Object.entries(t.choix);
-   let start=x-(arr.length-1)*270/2;
-   arr.forEach(([lab,child],i)=>walk(child,start+i*270,y+170,id,lab));
-  }
- }
- walk(tree,500,60,null,"");
- render();
-}
+      div.innerHTML = `
+        <div class="header-row">
+          <select class="type-select">
+            <option value="decision" ${!isResult ? 'selected' : ''}>Question</option>
+            <option value="resultat" ${isResult ? 'selected' : ''}>Résultat final</option>
+          </select>
+        </div>
+      `;
 
-function graphToTree(){
- let targets=new Set(edges.map(e=>e.target));
- let root=nodes.find(n=>!targets.has(n.id))||nodes[0];
- function build(n){
-  if(!n) return {};
-  if(n.type==="resultat") return {type:"resultat",donnees:n.donnees||{},infos_science:n.infos_science||{}};
-  let choix={};
-  edges.filter(e=>e.source===n.id).forEach(e=>{
-   let child=node(e.target);
-   if(child) choix[e.label||"Réponse"]=build(child);
-  });
-  return {type:"question",titre:n.titre||"Question sans titre",choix:choix};
- }
- return build(root);
-}
+      // Changement de type (Question <-> Résultat)
+      div.querySelector('.type-select').addEventListener('change', (e) => {
+        node.type = e.target.value;
+        if (node.type === 'resultat') {
+          delete node.marqueur; delete node.titre; delete node.choix;
+          node.source_senorif = ""; node.donnees = {};
+        } else {
+          delete node.source_senorif; delete node.donnees;
+          node.marqueur = "Nouveau_Marqueur"; node.titre = "Nouvelle question ?"; node.choix = {};
+        }
+        renderApp();
+      });
 
-function render(){
- let w=document.getElementById("world");
- w.innerHTML="";
- edges.forEach(renderEdge);
- nodes.forEach(renderNode);
- renderList();
- renderEditor();
- document.getElementById("preview").value=JSON.stringify(graphToTree(),null,2);
-}
+      if (!isResult) {
+        div.innerHTML += `
+          <label>Marqueur Python (ex: Chirurgie_mammaire)</label>
+          <input class="input-marqueur" value="${node.marqueur || ''}">
+          <label>Question affichée sur l'app web</label>
+          <input class="input-titre" value="${node.titre || ''}">
+          <h4>Réponses possibles :</h4>
+          <div class="children-container"></div>
+          <div style="display: flex; gap: 5px;">
+            <input type="text" class="new-choice-name" placeholder="Nom de la réponse (ex: Conservateur)">
+            <button class="add btn-add-choice">+ Ajouter</button>
+          </div>
+        `;
 
-function renderNode(n){
- let w=document.getElementById("world");
- let el=document.createElement("div");
- el.className="node "+(n.type==="resultat"?"result ":"")+(selectedNode===n.id?"selected":"");
- el.style.left=n.x+"px"; el.style.top=n.y+"px";
- el.innerHTML="<div class='type'>"+n.type+"</div><div class='title'>"+esc(n.type==="resultat"?"Résultat":n.titre)+"</div><div class='small'>"+esc(summary(n))+"</div>";
- el.onpointerdown=function(ev){
-  ev.preventDefault();
-  if(connectMode){connectClick(n.id);return}
-  selectedNode=n.id; selectedEdge=null;
-  drag={id:n.id,sx:ev.clientX,sy:ev.clientY,ox:n.x,oy:n.y};
-  render();
- };
- w.appendChild(el);
-}
+        div.querySelector('.input-marqueur').addEventListener('input', (e) => { node.marqueur = e.target.value; updateJSON(); });
+        div.querySelector('.input-titre').addEventListener('input', (e) => { node.titre = e.target.value; updateJSON(); });
+        
+        // Ajouter un choix
+        div.querySelector('.btn-add-choice').addEventListener('click', () => {
+          const val = div.querySelector('.new-choice-name').value.trim();
+          if (val && !node.choix[val]) {
+            node.choix[val] = { type: "resultat", source_senorif: "", donnees: {} }; // Par défaut, un nouveau choix mène à un résultat
+            renderApp();
+          }
+        });
 
-document.addEventListener("pointermove",function(ev){
- if(!drag)return;
- let n=node(drag.id);
- n.x=drag.ox+ev.clientX-drag.sx;
- n.y=drag.oy+ev.clientY-drag.sy;
- render();
-});
-document.addEventListener("pointerup",()=>drag=null);
+        // Rendu récursif des enfants
+        const container = div.querySelector('.children-container');
+        for (let key in node.choix) {
+          const childWrapper = document.createElement('div');
+          childWrapper.innerHTML = `<div class="header-row"><b>Si la réponse est "${key}" :</b> <button class="danger">X Supprimer</button></div>`;
+          
+          childWrapper.querySelector('.danger').addEventListener('click', () => {
+            delete node.choix[key];
+            renderApp();
+          });
 
-function renderEdge(e){
- let s=node(e.source), t=node(e.target);
- if(!s||!t)return;
- let w=document.getElementById("world");
- let x1=s.x+110,y1=s.y+70,x2=t.x+110,y2=t.y;
- let dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy),ang=Math.atan2(dy,dx)*180/Math.PI;
- let line=document.createElement("div");
- line.className="edge"; line.style.left=x1+"px"; line.style.top=y1+"px"; line.style.width=len+"px"; line.style.transform="rotate("+ang+"deg)";
- w.appendChild(line);
- let lab=document.createElement("div");
- lab.className="label"; lab.style.left=((x1+x2)/2-30)+"px"; lab.style.top=((y1+y2)/2-10)+"px"; lab.textContent=e.label||"Réponse";
- lab.onclick=function(){selectedEdge=e.id;selectedNode=null;render()};
- w.appendChild(lab);
-}
+          childWrapper.appendChild(createNodeElement(node.choix[key]));
+          container.appendChild(childWrapper);
+        }
 
-function summary(n){
- if(n.type==="resultat"){let k=Object.keys(n.donnees||{});return k.length?k.slice(0,3).join(", "):"(vide)"}
- let out=edges.filter(e=>e.source===n.id);return out.length?out.map(e=>e.label).join(" / "):"(aucune réponse)"
-}
+      } else {
+        // Formulaire pour le Résultat
+        div.innerHTML += `
+          <label>Source Référentiel (ex: Arbre 4, Page 45)</label>
+          <input class="input-source" value="${node.source_senorif || ''}">
+          <label>Données Traitements (Format JSON, ex: {"OUT_Radiothérapie": "1.0"})</label>
+          <input class="input-donnees" value='${JSON.stringify(node.donnees || {})}' style="font-family: monospace;">
+        `;
 
-function renderList(){
- let list=document.getElementById("list"); list.innerHTML="";
- nodes.forEach(n=>{
-  let d=document.createElement("div");
-  d.style.padding="6px"; d.style.borderBottom="1px solid #eee"; d.textContent=n.type+" — "+(n.type==="resultat"?summary(n):n.titre);
-  d.onclick=()=>{selectedNode=n.id;selectedEdge=null;render()};
-  list.appendChild(d);
- });
-}
+        div.querySelector('.input-source').addEventListener('input', (e) => { node.source_senorif = e.target.value; updateJSON(); });
+        div.querySelector('.input-donnees').addEventListener('change', (e) => {
+          try {
+            node.donnees = JSON.parse(e.target.value);
+            e.target.style.borderColor = "#d1d5db"; // Reset bordure si OK
+            updateJSON();
+          } catch(err) {
+            e.target.style.borderColor = "red"; // Rouge si erreur de syntaxe JSON
+          }
+        });
+      }
 
-function renderEditor(){
- let n=node(selectedNode), e=edge(selectedEdge);
- document.getElementById("editEmpty").style.display=n||e?"none":"block";
- document.getElementById("nodeEdit").style.display=n?"block":"none";
- document.getElementById("edgeEdit").style.display=e?"block":"none";
- if(n){
-  document.getElementById("editType").value=n.type;
-  document.getElementById("editTitle").value=n.titre||"";
-  document.getElementById("editData").value=JSON.stringify(n.donnees||{},null,2);
- }
- if(e) document.getElementById("editEdgeLabel").value=e.label||"";
-}
+      return div;
+    }
 
-function updateNode(){let n=node(selectedNode);if(!n)return;n.type=document.getElementById("editType").value;n.titre=document.getElementById("editTitle").value;render()}
-function updateNodeData(){let n=node(selectedNode);if(!n)return;try{n.donnees=JSON.parse(document.getElementById("editData").value||"{}");render()}catch(err){alert("JSON données invalide: "+err.message)}}
-function updateEdge(){let e=edge(selectedEdge);if(!e)return;e.label=document.getElementById("editEdgeLabel").value;render()}
+    function updateJSON() {
+      document.getElementById('json-output').value = JSON.stringify(treeData, null, 2);
+    }
 
-function addQuestion(){nodes.push({id:uid("n"),type:"question",titre:"Nouvelle question",donnees:{},infos_science:{},x:120,y:120});render()}
-function addResult(){nodes.push({id:uid("n"),type:"resultat",titre:"",donnees:{"Traitement":"1"},infos_science:{},x:160,y:300});render()}
-function deleteNode(){if(!selectedNode)return;nodes=nodes.filter(n=>n.id!==selectedNode);edges=edges.filter(e=>e.source!==selectedNode&&e.target!==selectedNode);selectedNode=null;render()}
-function deleteEdge(){if(!selectedEdge)return;edges=edges.filter(e=>e.id!==selectedEdge);selectedEdge=null;render()}
-function toggleConnect(){connectMode=!connectMode;connectSource=null;alert(connectMode?"Clique le parent puis l'enfant":"Mode liaison désactivé")}
-function connectClick(id){if(!connectSource){connectSource=id;return}else{edges.push({id:uid("e"),source:connectSource,target:id,label:"Réponse"});connectSource=null;connectMode=false;render()}}
-
-function importPasted(){try{treeToGraph(JSON.parse(document.getElementById("pasteBox").value))}catch(e){alert("JSON invalide: "+e.message)}}
-document.getElementById("fileInput").addEventListener("change",function(ev){
- let f=ev.target.files[0]; if(!f)return;
- let r=new FileReader();
- r.onload=()=>{try{treeToGraph(JSON.parse(r.result))}catch(e){alert("JSON invalide: "+e.message)}};
- r.readAsText(f);
-});
-function exportJSON(){let txt=JSON.stringify(graphToTree(),null,2);let blob=new Blob([txt],{type:"application/json"});let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="arbre_decision.json";a.click();}
-function saveLocal(){localStorage.setItem("arbre_senorif_editor",JSON.stringify({nodes,edges}));alert("Sauvegardé")}
-function loadLocal(){let s=localStorage.getItem("arbre_senorif_editor");if(!s)return alert("Pas de sauvegarde");let o=JSON.parse(s);nodes=o.nodes;edges=o.edges;render()}
-function loadExample(){treeToGraph(example())}
-function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]))}
-
-loadExample();
-</script>
+    // Initialisation
+    renderApp();
+  </script>
 </body>
 </html>
