@@ -1,156 +1,143 @@
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <title>SenoRif - Éditeur JSON Simplifié</title>
-  <style>
-    body { font-family: system-ui, sans-serif; display: flex; margin: 0; background: #f3f4f6; color: #1f2937; height: 100vh; overflow: hidden; }
-    #editor-col { width: 55%; padding: 20px; overflow-y: auto; }
-    #json-col { width: 45%; background: #1e293b; padding: 20px; display: flex; flex-direction: column; }
-    textarea.code { flex-grow: 1; width: 100%; background: #0f172a; color: #38bdf8; font-family: monospace; padding: 15px; border: none; border-radius: 8px; resize: none; outline: none; }
-    
-    .node-card { background: white; border-radius: 8px; padding: 15px; margin-top: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #3b82f6; }
-    .node-card.resultat { border-left-color: #10b981; background: #ecfdf5; }
-    .children-container { margin-left: 20px; padding-left: 15px; border-left: 2px dashed #cbd5e1; margin-top: 10px; }
-    
-    input, select { width: 100%; padding: 8px; margin: 5px 0 15px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box; }
-    button { background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    button:hover { background: #2563eb; }
-    button.danger { background: #ef4444; padding: 4px 8px; font-size: 12px; }
-    button.add { background: #10b981; margin-top: 5px; }
-    
-    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    h3, h4 { margin: 0 0 10px 0; }
-  </style>
-</head>
-<body>
-
-  <div id="editor-col">
-    <h2 style="margin-top:0;">Créateur d'Arbre SenoRif</h2>
-    <p style="font-size: 14px; color: #4b5563;">Générateur de formulaire dynamique. Les modifications apparaissent directement dans le JSON.</p>
-    <div id="tree-root"></div>
-  </div>
-
-  <div id="json-col">
-    <h2 style="color: white; margin-top: 0;">Fichier JSON généré</h2>
-    <textarea id="json-output" class="code" readonly></textarea>
-  </div>
-
-  <script>
-    // État initial de l'arbre
-    let treeData = {
-      type: "decision",
-      marqueur: "Carcinome",
-      titre: "Quel est le type de carcinome ?",
-      choix: {}
-    };
-
-    function renderApp() {
-      const root = document.getElementById('tree-root');
-      root.innerHTML = '';
-      root.appendChild(createNodeElement(treeData));
-      updateJSON();
-    }
-
-    // Fonction récursive qui crée l'interface pour chaque nœud
-    function createNodeElement(node) {
-      const isResult = node.type === 'resultat';
-      const div = document.createElement('div');
-      div.className = 'node-card ' + (isResult ? 'resultat' : '');
-
-      div.innerHTML = `
-        <div class="header-row">
-          <select class="type-select">
-            <option value="decision" ${!isResult ? 'selected' : ''}>Question</option>
-            <option value="resultat" ${isResult ? 'selected' : ''}>Résultat final</option>
-          </select>
-        </div>
-      `;
-
-      // Changement de type (Question <-> Résultat)
-      div.querySelector('.type-select').addEventListener('change', (e) => {
-        node.type = e.target.value;
-        if (node.type === 'resultat') {
-          delete node.marqueur; delete node.titre; delete node.choix;
-          node.source_senorif = ""; node.donnees = {};
-        } else {
-          delete node.source_senorif; delete node.donnees;
-          node.marqueur = "Nouveau_Marqueur"; node.titre = "Nouvelle question ?"; node.choix = {};
-        }
-        renderApp();
-      });
-
-      if (!isResult) {
-        div.innerHTML += `
-          <label>Marqueur Python (ex: Chirurgie_mammaire)</label>
-          <input class="input-marqueur" value="${node.marqueur || ''}">
-          <label>Question affichée sur l'app web</label>
-          <input class="input-titre" value="${node.titre || ''}">
-          <h4>Réponses possibles :</h4>
-          <div class="children-container"></div>
-          <div style="display: flex; gap: 5px;">
-            <input type="text" class="new-choice-name" placeholder="Nom de la réponse (ex: Conservateur)">
-            <button class="add btn-add-choice">+ Ajouter</button>
-          </div>
-        `;
-
-        div.querySelector('.input-marqueur').addEventListener('input', (e) => { node.marqueur = e.target.value; updateJSON(); });
-        div.querySelector('.input-titre').addEventListener('input', (e) => { node.titre = e.target.value; updateJSON(); });
-        
-        // Ajouter un choix
-        div.querySelector('.btn-add-choice').addEventListener('click', () => {
-          const val = div.querySelector('.new-choice-name').value.trim();
-          if (val && !node.choix[val]) {
-            node.choix[val] = { type: "resultat", source_senorif: "", donnees: {} }; // Par défaut, un nouveau choix mène à un résultat
-            renderApp();
+{
+  "type": "decision",
+  "marqueur": "Carcinome",
+  "titre": "Quel est le type de carcinome ?",
+  "choix": {
+    "In situ": {
+      "type": "decision",
+      "marqueur": "Marges et autres paramètres",
+      "titre": "Taille des marges (en mm) :",
+      "choix": {
+        ">2": {
+          "type": "resultat",
+          "source_senorif": "Arbre 1 : Prise en charge des carcinomes in situ (CCIS) (Page 32)",
+          "donnees": {
+            "OUT_Radiothérapie": "1.0"
           }
-        });
-
-        // Rendu récursif des enfants
-        const container = div.querySelector('.children-container');
-        for (let key in node.choix) {
-          const childWrapper = document.createElement('div');
-          childWrapper.innerHTML = `<div class="header-row"><b>Si la réponse est "${key}" :</b> <button class="danger">X Supprimer</button></div>`;
-          
-          childWrapper.querySelector('.danger').addEventListener('click', () => {
-            delete node.choix[key];
-            renderApp();
-          });
-
-          childWrapper.appendChild(createNodeElement(node.choix[key]));
-          container.appendChild(childWrapper);
-        }
-
-      } else {
-        // Formulaire pour le Résultat
-        div.innerHTML += `
-          <label>Source Référentiel (ex: Arbre 4, Page 45)</label>
-          <input class="input-source" value="${node.source_senorif || ''}">
-          <label>Données Traitements (Format JSON, ex: {"OUT_Radiothérapie": "1.0"})</label>
-          <input class="input-donnees" value='${JSON.stringify(node.donnees || {})}' style="font-family: monospace;">
-        `;
-
-        div.querySelector('.input-source').addEventListener('input', (e) => { node.source_senorif = e.target.value; updateJSON(); });
-        div.querySelector('.input-donnees').addEventListener('change', (e) => {
-          try {
-            node.donnees = JSON.parse(e.target.value);
-            e.target.style.borderColor = "#d1d5db"; // Reset bordure si OK
-            updateJSON();
-          } catch(err) {
-            e.target.style.borderColor = "red"; // Rouge si erreur de syntaxe JSON
+        },
+        "<2": {
+          "type": "resultat",
+          "source_senorif": "Arbre 1 : Prise en charge des carcinomes in situ (CCIS) (Page 32)",
+          "donnees": {
+            "OUT_Reprise chirurgicale": "1.0"
           }
-        });
+        }
       }
-
-      return div;
+    },
+    "Infiltrant": {
+      "type": "decision",
+      "marqueur": "Metastases",
+      "titre": "Présence de métastases d'emblée ?",
+      "choix": {
+        "M1": {
+          "type": "resultat",
+          "source_senorif": "Arbre 9 : Prise en charge des cancers du sein métastatiques d'emblée (Page 64)",
+          "donnees": {
+            "OUT_Traitement systémique palliatif": "1.0",
+            "OUT_RCP": "1.0"
+          }
+        },
+        "M0": {
+          "type": "decision",
+          "marqueur": "Chirurgie_mammaire",
+          "titre": "Type de chirurgie mammaire envisagée :",
+          "choix": {
+            "Conservateur": {
+              "type": "resultat",
+              "source_senorif": "Arbre 7 : Traitement conservateur et indications de radiothérapie (Page 55)",
+              "donnees": {
+                "OUT_Radiothérapie": "1.0",
+                "OUT_RCP": "1.0"
+              }
+            },
+            "MT": {
+              "type": "decision",
+              "marqueur": "Chirurgie_axillaire",
+              "titre": "Type de chirurgie axillaire :",
+              "choix": {
+                "Ganglion sentinelle": {
+                  "type": "resultat",
+                  "source_senorif": "Arbre 2 : Indications de la technique du ganglion sentinelle (Page 38)",
+                  "donnees": {
+                    "OUT_RCP": "1.0"
+                  }
+                },
+                "CA": {
+                  "type": "decision",
+                  "marqueur": "N",
+                  "titre": "Statut ganglionnaire (pN) :",
+                  "choix": {
+                    "pN0": {
+                      "type": "resultat",
+                      "source_senorif": "Arbre 3 : Prise en charge des cancers infiltrants pN0 (Page 42)",
+                      "donnees": {
+                        "OUT_Abstention": "0.5",
+                        "OUT_RCP": "1.0"
+                      }
+                    },
+                    "pN1-3": {
+                      "type": "decision",
+                      "marqueur": "HER2",
+                      "titre": "Statut HER2 :",
+                      "choix": {
+                        "1.0": {
+                          "type": "resultat",
+                          "source_senorif": "Arbre 6 : Traitement adjuvant des cancers infiltrants HER2+ (Page 52)",
+                          "donnees": {
+                            "OUT_Radiothérapie": "1.0",
+                            "OUT_Chimiothérapie": "1.0",
+                            "OUT_Thérapie ciblée": "1.0"
+                          }
+                        },
+                        "0.0": {
+                          "type": "decision",
+                          "marqueur": "RE",
+                          "titre": "Statut des Récepteurs Hormonaux (RH) :",
+                          "choix": {
+                            "0.0": {
+                              "type": "resultat",
+                              "source_senorif": "Arbre 5 : Traitement adjuvant des cancers infiltrants Triple Négatifs (Page 48)",
+                              "donnees": {
+                                "OUT_Radiothérapie": "1.0",
+                                "OUT_Chimiothérapie": "1.0",
+                                "OUT_RCP": "1.0"
+                              }
+                            },
+                            "1.0": {
+                              "type": "decision",
+                              "marqueur": "Ménopause %",
+                              "titre": "La patiente est-elle ménopausée ?",
+                              "choix": {
+                                "1.0": {
+                                  "type": "resultat",
+                                  "source_senorif": "Arbre 4 : Traitement adjuvant des cancers infiltrants RH+ / HER2- (Page 45)",
+                                  "donnees": {
+                                    "OUT_Radiothérapie": "1.0",
+                                    "OUT_Hormonothérapie seule": "1.0"
+                                  }
+                                },
+                                "0.0": {
+                                  "type": "resultat",
+                                  "source_senorif": "Arbre 4 : Traitement adjuvant des cancers infiltrants RH+ / HER2- (Page 45)",
+                                  "donnees": {
+                                    "OUT_Radiothérapie": "1.0",
+                                    "OUT_Hormonothérapie seule": "1.0",
+                                    "OUT_Chimiothérapie": "0.5"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
-
-    function updateJSON() {
-      document.getElementById('json-output').value = JSON.stringify(treeData, null, 2);
-    }
-
-    // Initialisation
-    renderApp();
-  </script>
-</body>
-</html>
+  }
+}
