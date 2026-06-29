@@ -78,6 +78,8 @@ h3 .hint{font-size:11px;color:var(--text-muted);font-weight:500}
 .node.result{border-color:var(--success);background:linear-gradient(180deg,#ecfdf5,#d9f5e3);
  box-shadow:0 4px 14px rgba(22,163,74,.16)}
 .node.result:hover{box-shadow:0 8px 20px rgba(22,163,74,.24)}
+.node.etape{border-color:#0891b2;background:linear-gradient(180deg,#ecfeff,#cffafe);}
+.node.etape:hover{box-shadow:0 8px 20px rgba(8,145,178,.24)}
 .node.decision{border-color:#9333ea;background:linear-gradient(180deg,#f5f3ff,#ebe5fb)}
 .node.selected{outline:3px solid var(--warning);outline-offset:2px}
 .type{font-size:9.5px;font-weight:800;color:rgba(15,23,42,.5);margin-bottom:4px;text-transform:uppercase;letter-spacing:.07em}
@@ -149,9 +151,9 @@ details.listGroup[open]>summary::before{content:"▾ "}
 <div class="toolbar">
 
 <div class="grp">
- <span class="grpLabel">📂 Charger arbre à modifier</span>
+ <span class="grpLabel">📂 Charger arbre</span>
  <span class="grpBtns">
-  <button onclick="document.getElementById('fileInput').click()">Depuis mon ordinateur</button>
+  <button onclick="document.getElementById('fileInput').click()">Depuis l'ordinateur</button>
   <button onclick="reloadRealTree()">Depuis GitHub</button>
  </span>
 </div>
@@ -160,6 +162,7 @@ details.listGroup[open]>summary::before{content:"▾ "}
  <span class="grpLabel">✏️ Éditeur</span>
  <span class="grpBtns">
   <button onclick="addQuestion()">+ Question</button>
+  <button onclick="addEtape()">+ Étape</button>
   <button onclick="addResult()">+ Recommandation</button>
   <button onclick="toggleConnect()">Relier deux nœuds</button>
  </span>
@@ -174,7 +177,7 @@ details.listGroup[open]>summary::before{content:"▾ "}
 </div>
 
 <div class="grp">
- <span class="grpLabel">💾 Enregistrer les modifications</span>
+ <span class="grpLabel">💾 Enregistrer</span>
  <span class="grpBtns">
   <button class="primary" onclick="exportJSON()">Télécharger JSON</button>
   <button class="success" onclick="saveForGithub()">Vers GitHub</button>
@@ -207,12 +210,11 @@ details.listGroup[open]>summary::before{content:"▾ "}
   <b>Mode d'emploi :</b><br>
   1. Cliquez sur un nœud (ou une question de la liste à gauche, ou une réponse de son menu déplié) pour le modifier dans le panneau de droite.<br>
   2. Une fois vos modifications faites dans le panneau de droite, cliquez sur « Valider » pour les appliquer à l'arbre.<br>
-  3. La forme de l'arbre est calculée automatiquement : vous ne pouvez pas déplacer un nœud à la main, elle se réorganise toute seule dès que vous ajoutez/supprimez une question, une recommandation ou une branche.<br>
-  4. Si un nœud est sélectionné (en surbrillance), cliquer sur « + Question » ou « + Recommandation » crée directement le lien avec ce nœud. Sinon, utilisez « Relier deux nœuds » : cliquez le parent puis l'enfant.<br>
-  5. Pour vous déplacer : cliquez-glissez sur le fond, utilisez les barres de défilement, ou la molette de la souris au-dessus de l'arbre pour zoomer/dézoomer.<br>
+  3. La forme de l'arbre est calculée automatiquement : vous ne pouvez pas déplacer un nœud à la main, elle se réorganise toute seule dès que vous ajoutez/supprimez un élément.<br>
+  4. <b>Question vs Étape :</b> Une <i>Question</i> peut avoir plusieurs réponses (branches). Une <i>Étape</i> n'a qu'une seule sortie (pas de texte sur la branche) et passe directement à la suite.<br>
+  5. Si un nœud est sélectionné (en surbrillance), cliquer sur « + » crée directement le lien avec ce nœud. Sinon, utilisez « Relier deux nœuds » : cliquez le parent puis l'enfant.<br>
   6. Utilisez la barre de recherche pour retrouver un nœud par mot-clé : l'arbre se centre sur lui et le sélectionne pour modification immédiate.<br>
-  7. Une branche peut avoir plusieurs réponses possibles menant au même nœud suivant : ajoutez chaque valeur séparément avec « + Ajouter une valeur » dans l'édition de la branche.<br>
-  8. Ctrl+Z pour annuler, Ctrl+Maj+Z pour rétablir.
+  7. Ctrl+Z pour annuler, Ctrl+Maj+Z pour rétablir.
   </p>
   <div class="notice"><b>Mise à jour GitHub :</b><br>1. Cliquez sur « Vers GitHub ».<br>2. Allez dans le dépôt GitHub de l'Atlas.<br>3. Supprimez l'ancien <code>arbre_dynamique.json</code>.<br>4. Ajoutez le fichier téléchargé.<br>5. Vérifiez qu'il s'appelle exactement <code>arbre_dynamique.json</code>.<br>6. Cliquez sur « Commit changes ».</div>
   <hr class="divider">
@@ -231,10 +233,11 @@ details.listGroup[open]>summary::before{content:"▾ "}
 
 <div class="legend">
  <span><i class="dot" style="background:#2563eb"></i> Question</span>
+ <span><i class="dot" style="background:#0891b2"></i> Étape</span>
  <span><i class="dot" style="background:#16a34a"></i> Recommandation</span>
 </div>
 
-<h3>Questions <span class="hint">(cliquez pour voir les réponses)</span></h3>
+<h3>Parcours <span class="hint">(cliquez pour voir les réponses/suites)</span></h3>
 <div id="list"></div>
 </div>
 
@@ -249,11 +252,12 @@ details.listGroup[open]>summary::before{content:"▾ "}
 <div id="nodeEdit" style="display:none">
 <label>Type</label>
 <select id="editType">
-<option value="question">question</option>
-<option value="resultat">recommandation</option>
+<option value="question">Question</option>
+<option value="etape">Étape / Action</option>
+<option value="resultat">Recommandation</option>
 </select>
 
-<label>Question ou nom de la recommandation</label>
+<label>Titre (Question, étape ou nom reco)</label>
 <textarea id="editTitle" style="min-height:60px"></textarea>
 
 <label>Données recommandation JSON</label>
@@ -270,9 +274,14 @@ details.listGroup[open]>summary::before{content:"▾ "}
 
 <div id="edgeEdit" style="display:none">
 <label>Réponse(s) / branche <span class="hint" style="text-transform:none;font-weight:500">(plusieurs valeurs possibles pour la même branche)</span></label>
-<div id="editEdgeValues"></div>
-<button class="ghost" style="width:100%;margin-top:6px" onclick="addEdgeValueField()">+ Ajouter une valeur</button>
-<button class="primary" style="width:100%;margin-top:16px" onclick="applyEdgeEdits()">✓ Valider la réponse</button>
+<div id="edgeValuesWrapper">
+    <div id="editEdgeValues"></div>
+    <button class="ghost" style="width:100%;margin-top:6px" onclick="addEdgeValueField()">+ Ajouter une valeur</button>
+</div>
+<div id="edgeEtapeNotice" style="display:none; margin-bottom: 16px;" class="notice">
+    Cette branche relie directement une étape à la suite du parcours. Aucune réponse (label) n'est requise.
+</div>
+<button class="primary" style="width:100%;margin-top:16px" onclick="applyEdgeEdits()">✓ Valider la liaison</button>
 
 <hr class="divider">
 <button class="danger" style="width:100%" onclick="deleteEdge()">🗑 Supprimer branche</button>
@@ -310,8 +319,6 @@ function uid(p){return p+Math.random().toString(36).slice(2,9)}
 function node(id){return nodes.find(n=>n.id===id)}
 function edge(id){return edges.find(e=>e.id===id)}
 
-// Une branche peut porter plusieurs valeurs de réponse (ex: "bleu, vert") qui menent
-// toutes les deux au même nœud suivant : stocké comme une liste séparée par virgule.
 function edgeValues(e){
  let vals=String((e&&e.label)||"").split(",").map(s=>s.trim()).filter(Boolean);
  return vals.length ? vals : ["Réponse"];
@@ -331,7 +338,7 @@ function treeToGraph(tree){
  let count=1;
 
  function walk(t, parent, label){
-  let children=t && t.type!=="resultat" && t.choix ? Object.entries(t.choix) : [];
+  if(!t) return null;
   let id="n"+count++;
 
   nodes.push({
@@ -345,8 +352,13 @@ function treeToGraph(tree){
     y:0
   });
 
-  if(parent) edges.push({id:uid("e"),source:parent,target:id,label:label||"Réponse"});
-  children.forEach(([lab,child])=>walk(child, id, lab));
+  if(parent) edges.push({id:uid("e"),source:parent,target:id,label:label||""});
+  
+  if (t.type === "etape" && t.suite) {
+      walk(t.suite, id, "");
+  } else if (t.type !== "resultat" && t.choix) {
+      Object.entries(t.choix).forEach(([lab,child])=>walk(child, id, lab));
+  }
   return id;
  }
 
@@ -356,9 +368,6 @@ function treeToGraph(tree){
  setTimeout(fitView, 50);
 }
 
-// Calcule automatiquement la position de chaque nœud d'après les branches (edges).
-// C'est la SEULE façon dont les nœuds sont positionnés : on ne peut pas les déplacer à la main,
-// pour garantir que l'arbre reste toujours bien rangé.
 function autoLayout(){
  if(!nodes.length) return;
  let incoming=new Set(edges.map(e=>e.target));
@@ -412,12 +421,23 @@ function graphToTree(){
     infos_science:n.infos_science||{},
     source_senorif:n.source_senorif||""
   };
+  if(n.type==="etape") {
+    let outEdges=edges.filter(e=>e.source===n.id);
+    let suiteNode=outEdges.length ? build(node(outEdges[0].target)) : null;
+    return {
+        type:"etape",
+        titre:n.titre||"Étape sans titre",
+        suite:suiteNode,
+        infos_science:n.infos_science||{},
+        source_senorif:n.source_senorif||""
+    };
+  }
   let choix={};
   edges.filter(e=>e.source===n.id).forEach(e=>{
-   let child=node(e.target);
-   if(!child) return;
-   let subtree=build(child);
-   edgeValues(e).forEach(v=>choix[v]=subtree);
+    let child=node(e.target);
+    if(!child) return;
+    let subtree=build(child);
+    edgeValues(e).forEach(v=>choix[v]=subtree);
   });
   return {
     type:n.type||"question",
@@ -464,10 +484,10 @@ function fitFontSize(text){
 function renderNode(n){
  let w=document.getElementById("world");
  let el=document.createElement("div");
- el.className="node "+(n.type==="resultat"?"result ":"")+(n.type==="decision"?"decision ":"")+(selectedNode===n.id?"selected":"");
+ el.className="node "+(n.type==="resultat"?"result ":"")+(n.type==="etape"?"etape ":"")+(n.type==="decision"?"decision ":"")+(selectedNode===n.id?"selected":"");
  el.style.left=n.x+"px"; el.style.top=n.y+"px";
  let typeLabel = n.type==="resultat" ? "recommandation" : n.type;
- let titleLabel = n.titre || (n.type==="resultat" ? summary(n) : "Question sans titre");
+ let titleLabel = n.titre || (n.type==="resultat" ? summary(n) : (n.type==="etape"?"Étape sans titre":"Question sans titre"));
  let smallLabel = n.type==="resultat" ? "" : summary(n);
  el.title = titleLabel + (smallLabel ? " — "+smallLabel : "");
 
@@ -513,7 +533,6 @@ document.getElementById("canvas").addEventListener("pointerleave",function(){
  this.style.cursor="grab";
 });
 
-// Zoom à la molette quand la souris est au-dessus de l'arbre, centré sur le curseur.
 document.getElementById("canvas").addEventListener("wheel",function(ev){
  ev.preventDefault();
  let canvas=this;
@@ -527,9 +546,6 @@ document.getElementById("canvas").addEventListener("wheel",function(ev){
  canvas.scrollTop = worldY*zoom - cy;
 }, {passive:false});
 
-// Sur iPad (trackpad ou pincement tactile), Safari déclenche un pincement de zoom natif sur
-// toute la page via ces événements "gesture*" (en plus ou à la place de "wheel"). On les bloque
-// partout pour que seul le zoom de l'arbre (slider, boutons, molette/pincement au-dessus du canvas) fonctionne.
 ["gesturestart","gesturechange","gestureend"].forEach(function(evtName){
  document.addEventListener(evtName, function(ev){ ev.preventDefault(); }, {passive:false});
 });
@@ -537,6 +553,7 @@ document.getElementById("canvas").addEventListener("wheel",function(ev){
 function renderEdge(e){
  let s=node(e.source), t=node(e.target);
  if(!s||!t)return;
+ let isEtape = s.type === "etape";
  let w=document.getElementById("world");
  let x1=s.x+NODE_W/2,y1=s.y+NODE_H,x2=t.x+NODE_W/2,y2=t.y;
  let dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy),ang=Math.atan2(dy,dx)*180/Math.PI;
@@ -544,26 +561,36 @@ function renderEdge(e){
  let line=document.createElement("div");
  line.className="edge"+(sel?" selected":""); line.style.left=x1+"px"; line.style.top=y1+"px"; line.style.width=len+"px"; line.style.transform="rotate("+ang+"deg)";
  w.appendChild(line);
+ 
  let lab=document.createElement("div");
- lab.className="label"+(sel?" selected":""); lab.style.left=((x1+x2)/2-40)+"px"; lab.style.top=((y1+y2)/2-10)+"px"; lab.textContent=edgeLabelDisplay(e);
+ lab.className="label"+(sel?" selected":""); 
+ if(isEtape){
+     lab.style.left=((x1+x2)/2-15)+"px"; 
+     lab.style.top=((y1+y2)/2-10)+"px"; 
+     lab.style.padding = "2px 6px";
+     lab.innerHTML="<span style='color:var(--primary); font-size:14px; line-height:1'>↓</span>";
+ } else {
+     lab.style.left=((x1+x2)/2-40)+"px"; 
+     lab.style.top=((y1+y2)/2-10)+"px"; 
+     lab.textContent=edgeLabelDisplay(e);
+ }
  lab.onclick=function(){selectedEdge=e.id;selectedNode=null;render()};
  w.appendChild(lab);
 }
 
 function summary(n){
  if(n.type==="resultat"){let k=Object.keys(n.donnees||{});return k.length?k.slice(0,3).join(", "):"(vide)"}
+ if(n.type==="etape"){let out=edges.filter(e=>e.source===n.id);return out.length?("→ "+(node(out[0].target)?.titre||"?")):"(aucune suite)"}
  let out=edges.filter(e=>e.source===n.id);return out.length?out.map(edgeLabelDisplay).join("  •  "):"(aucune réponse)"
 }
 
 function nodeColor(type){
  if(type==="resultat") return "#16a34a";
+ if(type==="etape") return "#0891b2";
  if(type==="decision") return "#9333ea";
  return "#2563eb";
 }
 
-// Liste à plat de TOUTES les questions (quel que soit leur niveau dans l'arbre) :
-// chaque question est repliable et révèle ses réponses, avec le nœud (question ou recommandation)
-// vers lequel chacune mène.
 function buildQuestionRow(n){
  let childEdges=edges.filter(e=>e.source===n.id);
  let det=document.createElement("details");
@@ -579,7 +606,7 @@ function buildQuestionRow(n){
  if(!childEdges.length){
   let empty=document.createElement("div");
   empty.className="listRow"; empty.style.marginLeft="14px"; empty.style.opacity=".6";
-  empty.textContent="(aucune réponse)";
+  empty.textContent="(aucune suite)";
   det.appendChild(empty);
  }
  childEdges.forEach(e=>{
@@ -587,7 +614,8 @@ function buildQuestionRow(n){
   let row=document.createElement("div");
   row.className="listRow"+(selectedEdge===e.id?" sel":"");
   row.style.marginLeft="14px"; row.style.borderLeftColor="#f59e0b";
-  row.textContent="↳ « "+edgeLabelDisplay(e)+" » → "+(child?(child.titre||"(sans titre)"):"?");
+  let labelDisplay = n.type === "etape" ? "Suite" : edgeLabelDisplay(e);
+  row.textContent="↳ "+(n.type==="etape"?"":"« "+labelDisplay+" » → ")+(child?(child.titre||"(sans titre)"):"?");
   row.onclick=function(ev){
    ev.stopPropagation();
    selectedEdge=e.id; selectedNode=null;
@@ -615,7 +643,17 @@ function renderEditor(){
   document.getElementById("editData").value=JSON.stringify(n.donnees||{},null,2);
   document.getElementById("editSource").value=n.source_senorif||"";
  }
- if(e) renderEdgeValueFields(edgeValues(e));
+ if(e){
+  let s=node(e.source);
+  if(s && s.type==="etape"){
+      document.getElementById("edgeValuesWrapper").style.display="none";
+      document.getElementById("edgeEtapeNotice").style.display="block";
+  } else {
+      document.getElementById("edgeValuesWrapper").style.display="block";
+      document.getElementById("edgeEtapeNotice").style.display="none";
+      renderEdgeValueFields(edgeValues(e));
+  }
+ }
 }
 
 function renderEdgeValueFields(values){
@@ -646,7 +684,6 @@ function restoreState(snap){
  selectedNode=null; selectedEdge=null;
  render();
 }
-// À appeler juste AVANT toute modification structurelle, pour pouvoir y revenir avec Ctrl+Z.
 function pushHistory(){
  undoStack.push(snapshotState());
  if(undoStack.length>HISTORY_LIMIT) undoStack.shift();
@@ -677,8 +714,6 @@ function capFirst(s){
  return s.charAt(0).toUpperCase()+s.slice(1);
 }
 
-// Les champs ne s'appliquent qu'au clic sur "Valider", pour éviter qu'une frappe en cours
-// ne déclenche un rendu (et perde le curseur) ou une alerte JSON à chaque caractère tapé.
 function applyNodeEdits(){
  let n=node(selectedNode); if(!n) return;
  pushHistory();
@@ -696,34 +731,56 @@ function applyNodeEdits(){
 function applyEdgeEdits(){
  let e=edge(selectedEdge); if(!e) return;
  pushHistory();
- let inputs=document.getElementById("editEdgeValues").querySelectorAll("input");
- let vals=Array.from(inputs).map(i=>i.value.trim()).filter(Boolean);
- e.label=vals.join(", ");
+ let s = node(e.source);
+ if(s && s.type === "etape"){
+     e.label = "";
+ } else {
+     let inputs=document.getElementById("editEdgeValues").querySelectorAll("input");
+     let vals=Array.from(inputs).map(i=>i.value.trim()).filter(Boolean);
+     e.label=vals.join(", ");
+ }
  render();
 }
 
-// Si un nœud est déjà sélectionné au moment du clic, le nouveau nœud est automatiquement
-// relié à la suite (le bouton "Relier deux nœuds" ne devient alors nécessaire que pour les cas particuliers).
 function addNodeLinkedToSelection(newNode){
  let parentId=selectedNode;
  nodes.push(newNode);
- if(parentId && node(parentId)) edges.push({id:uid("e"),source:parentId,target:newNode.id,label:"Réponse"});
+ if(parentId && node(parentId)) {
+     if(node(parentId).type === "etape") {
+         edges = edges.filter(e => e.source !== parentId); // L'étape n'a qu'une seule sortie
+         edges.push({id:uid("e"),source:parentId,target:newNode.id,label:""});
+     } else {
+         edges.push({id:uid("e"),source:parentId,target:newNode.id,label:"Réponse"});
+     }
+ }
  selectedNode=newNode.id; selectedEdge=null;
  autoLayout(); render();
 }
 function addQuestion(){pushHistory();addNodeLinkedToSelection({id:uid("n"),type:"question",titre:"Nouvelle question",donnees:{},infos_science:{},source_senorif:"",x:0,y:0})}
+function addEtape(){pushHistory();addNodeLinkedToSelection({id:uid("n"),type:"etape",titre:"Nouvelle étape",donnees:{},infos_science:{},source_senorif:"",x:0,y:0})}
 function addResult(){pushHistory();addNodeLinkedToSelection({id:uid("n"),type:"resultat",titre:"Nouvelle recommandation",donnees:{"Traitement":"1"},infos_science:{},source_senorif:"",x:0,y:0})}
 function deleteNode(){if(!selectedNode)return;pushHistory();nodes=nodes.filter(n=>n.id!==selectedNode);edges=edges.filter(e=>e.source!==selectedNode&&e.target!==selectedNode);selectedNode=null;autoLayout();render()}
 function deleteEdge(){if(!selectedEdge)return;pushHistory();edges=edges.filter(e=>e.id!==selectedEdge);selectedEdge=null;autoLayout();render()}
 function toggleConnect(){connectMode=!connectMode;connectSource=null;alert(connectMode?"Cliquez le parent puis l'enfant":"Mode liaison désactivé")}
-function connectClick(id){if(!connectSource){connectSource=id;return}else{pushHistory();edges.push({id:uid("e"),source:connectSource,target:id,label:"Réponse"});connectSource=null;connectMode=false;autoLayout();render()}}
+function connectClick(id){
+    if(!connectSource){connectSource=id;return;}
+    else{
+        pushHistory();
+        let s = node(connectSource);
+        if(s && s.type === "etape") {
+            edges = edges.filter(e => e.source !== connectSource); // Remplace la liaison existante
+            edges.push({id:uid("e"),source:connectSource,target:id,label:""});
+        } else {
+            edges.push({id:uid("e"),source:connectSource,target:id,label:"Réponse"});
+        }
+        connectSource=null;connectMode=false;autoLayout();render();
+    }
+}
 
 function fold(s){
  return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
 }
 
-// Recherche à la fois dans les nœuds (titre, données, source) et dans les réponses
-// portées par les traits (branches) qui relient les nœuds.
 function findMatches(term){
  let f=fold(term);
  if(!f) return [];
@@ -751,8 +808,6 @@ function setSearchStatus(text){
  document.getElementById("searchStatus").textContent=text;
 }
 
-// Recherche en direct, sans bloquer l'interface : pas besoin de taper le mot entier
-// ni d'appuyer sur Entrée, une recherche partielle (même sans les premières lettres) suffit.
 let liveSearchTimer=null;
 function liveSearch(){
  clearTimeout(liveSearchTimer);
@@ -858,13 +913,9 @@ function reloadRealTree(){
    })
    .catch(err=>{
      console.warn("Impossible de charger arbre_dynamique.json :", err);
-     // Ce chargement est automatique à l'ouverture de la page (vous n'avez rien cliqué) :
-     // l'éditeur essaie de récupérer l'arbre actuellement en ligne. Le cas le plus fréquent
-     // d'échec est l'ouverture du fichier .html directement depuis l'ordinateur (file://),
-     // que le navigateur bloque par sécurité — la page doit être ouverte via son adresse en ligne.
      let msg = location.protocol==="file:"
-       ? "Chargement auto impossible : ce fichier est ouvert directement depuis l'ordinateur (file://), le navigateur bloque cet accès par sécurité. Ouvrez la page en ligne (GitHub Pages), ou utilisez « Depuis mon ordinateur » pour charger le JSON à la main."
-       : "Chargement auto impossible ("+err.message+"). Utilisez « Depuis mon ordinateur » pour charger le JSON à la main.";
+       ? "Chargement auto impossible : ce fichier est ouvert directement depuis l'ordinateur (file://), le navigateur bloque cet accès par sécurité. Ouvrez la page en ligne (GitHub Pages), ou utilisez « Depuis l'ordinateur » pour charger le JSON à la main."
+       : "Chargement auto impossible ("+err.message+"). Utilisez « Depuis l'ordinateur » pour charger le JSON à la main.";
      setStatus(msg, false);
    });
 }
