@@ -437,17 +437,6 @@ function autoLayout(){
  resizeWorld();
 }
 
- roots.forEach(r=>place(r.id,0));
- nodes.forEach(n=>{
-   if(!visited.has(n.id)){
-     n.x=cursorX; n.y=80;
-     cursorX += NODE_W + X_GAP;
-     visited.add(n.id);
-   }
- });
- resizeWorld();
-}
-
 function graphToTree(){
  let targets=new Set(edges.map(e=>e.target));
  let root=nodes.find(n=>!targets.has(n.id))||nodes[0];
