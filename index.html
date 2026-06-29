@@ -1,143 +1,259 @@
-{
-  "type": "decision",
-  "marqueur": "Carcinome",
-  "titre": "Quel est le type de carcinome ?",
-  "choix": {
-    "In situ": {
-      "type": "decision",
-      "marqueur": "Marges et autres paramètres",
-      "titre": "Taille des marges (en mm) :",
-      "choix": {
-        ">2": {
-          "type": "resultat",
-          "source_senorif": "Arbre 1 : Prise en charge des carcinomes in situ (CCIS) (Page 32)",
-          "donnees": {
-            "OUT_Radiothérapie": "1.0"
-          }
-        },
-        "<2": {
-          "type": "resultat",
-          "source_senorif": "Arbre 1 : Prise en charge des carcinomes in situ (CCIS) (Page 32)",
-          "donnees": {
-            "OUT_Reprise chirurgicale": "1.0"
-          }
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parcours de Soins - Senorif</title>
+    <style>
+        /* Style de base pour rendre l'interface propre et fonctionnelle */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
         }
-      }
-    },
-    "Infiltrant": {
-      "type": "decision",
-      "marqueur": "Metastases",
-      "titre": "Présence de métastases d'emblée ?",
-      "choix": {
-        "M1": {
-          "type": "resultat",
-          "source_senorif": "Arbre 9 : Prise en charge des cancers du sein métastatiques d'emblée (Page 64)",
-          "donnees": {
-            "OUT_Traitement systémique palliatif": "1.0",
-            "OUT_RCP": "1.0"
-          }
-        },
-        "M0": {
-          "type": "decision",
-          "marqueur": "Chirurgie_mammaire",
-          "titre": "Type de chirurgie mammaire envisagée :",
+        
+        #app-container {
+            max-width: 700px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            color: #2c3e50;
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 1.4rem;
+        }
+
+        /* Boutons de navigation et de choix */
+        .btn-choix {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 12px;
+            background-color: #eef2f5;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            font-size: 1rem;
+            color: #2c3e50;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-choix:hover {
+            background-color: #e1e8ed;
+            border-color: #3498db;
+        }
+
+        .btn-action {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        .btn-action:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-action.secondary {
+            background-color: #7f8c8d;
+        }
+
+        /* Tableau des résultats */
+        .table-resultats {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        .table-resultats th, .table-resultats td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        .table-resultats th {
+            background-color: #f8f9fa;
+        }
+
+        .infos-science {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        </div>
+
+    <script>
+        // 1. Les données JSON (l'arbre logique)
+        const arbreData = {
+          "type": "question",
+          "titre": "Où en êtes-vous dans le parcours de soins ?",
           "choix": {
-            "Conservateur": {
-              "type": "resultat",
-              "source_senorif": "Arbre 7 : Traitement conservateur et indications de radiothérapie (Page 55)",
-              "donnees": {
-                "OUT_Radiothérapie": "1.0",
-                "OUT_RCP": "1.0"
-              }
-            },
-            "MT": {
-              "type": "decision",
-              "marqueur": "Chirurgie_axillaire",
-              "titre": "Type de chirurgie axillaire :",
+            "Une anomalie a été vue à l’imagerie, mais le diagnostic n’est pas encore confirmé": {
+              "type": "question",
+              "titre": "Quel type d’anomalie a été vu à l’imagerie ?",
               "choix": {
-                "Ganglion sentinelle": {
-                  "type": "resultat",
-                  "source_senorif": "Arbre 2 : Indications de la technique du ganglion sentinelle (Page 38)",
-                  "donnees": {
-                    "OUT_RCP": "1.0"
-                  }
-                },
-                "CA": {
-                  "type": "decision",
-                  "marqueur": "N",
-                  "titre": "Statut ganglionnaire (pN) :",
+                "Calcifications groupées vues à la mammographie": {
+                  "type": "question",
+                  "titre": "Comment les calcifications ont-elles été classées sur le compte-rendu d’imagerie ?",
                   "choix": {
-                    "pN0": {
+                    "ACR 2 bénin": {
                       "type": "resultat",
-                      "source_senorif": "Arbre 3 : Prise en charge des cancers infiltrants pN0 (Page 42)",
                       "donnees": {
-                        "OUT_Abstention": "0.5",
-                        "OUT_RCP": "1.0"
+                        "Surveillance habituelle": "1"
+                      },
+                      "infos_science": {
+                        "source": "SENORIF p.37"
                       }
                     },
-                    "pN1-3": {
-                      "type": "decision",
-                      "marqueur": "HER2",
-                      "titre": "Statut HER2 :",
+                    "ACR 3 probablement bénin": {
+                      "type": "resultat",
+                      "donnees": {
+                        "Surveillance rapprochée": "1"
+                      },
+                      "infos_science": {
+                        "source": "SENORIF p.37"
+                      }
+                    },
+                    "ACR 4 ou ACR 5": {
+                      "type": "question",
+                      "titre": "Biopsie indiquée ?",
                       "choix": {
-                        "1.0": {
+                        "Oui": {
                           "type": "resultat",
-                          "source_senorif": "Arbre 6 : Traitement adjuvant des cancers infiltrants HER2+ (Page 52)",
                           "donnees": {
-                            "OUT_Radiothérapie": "1.0",
-                            "OUT_Chimiothérapie": "1.0",
-                            "OUT_Thérapie ciblée": "1.0"
+                            "Biopsie stéréotaxique / macrobiopsie": "1"
+                          },
+                          "infos_science": {
+                            "source": "SENORIF p.37"
                           }
                         },
-                        "0.0": {
-                          "type": "decision",
-                          "marqueur": "RE",
-                          "titre": "Statut des Récepteurs Hormonaux (RH) :",
-                          "choix": {
-                            "0.0": {
-                              "type": "resultat",
-                              "source_senorif": "Arbre 5 : Traitement adjuvant des cancers infiltrants Triple Négatifs (Page 48)",
-                              "donnees": {
-                                "OUT_Radiothérapie": "1.0",
-                                "OUT_Chimiothérapie": "1.0",
-                                "OUT_RCP": "1.0"
-                              }
-                            },
-                            "1.0": {
-                              "type": "decision",
-                              "marqueur": "Ménopause %",
-                              "titre": "La patiente est-elle ménopausée ?",
-                              "choix": {
-                                "1.0": {
-                                  "type": "resultat",
-                                  "source_senorif": "Arbre 4 : Traitement adjuvant des cancers infiltrants RH+ / HER2- (Page 45)",
-                                  "donnees": {
-                                    "OUT_Radiothérapie": "1.0",
-                                    "OUT_Hormonothérapie seule": "1.0"
-                                  }
-                                },
-                                "0.0": {
-                                  "type": "resultat",
-                                  "source_senorif": "Arbre 4 : Traitement adjuvant des cancers infiltrants RH+ / HER2- (Page 45)",
-                                  "donnees": {
-                                    "OUT_Radiothérapie": "1.0",
-                                    "OUT_Hormonothérapie seule": "1.0",
-                                    "OUT_Chimiothérapie": "0.5"
-                                  }
-                                }
-                              }
-                            }
+                        "Non / impossible": {
+                          "type": "resultat",
+                          "donnees": {
+                            "RCP": "1"
+                          },
+                          "infos_science": {
+                            "source": "SENORIF p.37"
                           }
                         }
                       }
                     }
                   }
                 }
+                // Tu pourras coller l'intégralité de ton JSON ici.
+                // J'ai tronqué l'arbre ci-dessus pour la lisibilité de cet exemple.
               }
             }
           }
+        };
+
+        // 2. Variables d'état
+        const container = document.getElementById('app-container');
+        let historique = []; // Garde en mémoire le parcours pour le bouton retour
+
+        // 3. Initialisation de l'application
+        function démarrerApplication() {
+            historique = [arbreData];
+            afficherNoeud();
         }
-      }
-    }
-  }
-}
+
+        // 4. Fonction principale de rendu dynamique
+        function afficherNoeud() {
+            container.innerHTML = ''; // On vide le conteneur à chaque étape
+            const noeudActuel = historique[historique.length - 1];
+
+            // Création du bouton "Précédent" si on n'est pas à la racine
+            if (historique.length > 1) {
+                const btnRetour = document.createElement('button');
+                btnRetour.className = 'btn-action secondary';
+                btnRetour.textContent = '← Précédent';
+                btnRetour.onclick = () => {
+                    historique.pop(); // Retire le nœud actuel
+                    afficherNoeud();  // Réaffiche le nœud précédent
+                };
+                container.appendChild(btnRetour);
+            }
+
+            // AFFICHER UNE QUESTION OU UNE DÉCISION
+            if (noeudActuel.type === "question" || noeudActuel.type === "decision") {
+                const titre = document.createElement('h2');
+                titre.textContent = noeudActuel.titre;
+                container.appendChild(titre);
+
+                // Boucler sur les choix disponibles et créer les boutons
+                for (const [cle, enfant] of Object.entries(noeudActuel.choix)) {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-choix';
+                    btn.textContent = cle;
+                    btn.onclick = () => {
+                        historique.push(enfant); // Enregistre la nouvelle étape
+                        afficherNoeud(); // Met à jour l'interface
+                    };
+                    container.appendChild(btn);
+                }
+            } 
+            
+            // AFFICHER UN RÉSULTAT FINAL
+            else if (noeudActuel.type === "resultat") {
+                const titre = document.createElement('h2');
+                titre.textContent = "Décision / Synthèse";
+                container.appendChild(titre);
+
+                // Construire le tableau des données
+                if (noeudActuel.donnees) {
+                    const table = document.createElement('table');
+                    table.className = 'table-resultats';
+                    for (const [cle, valeur] of Object.entries(noeudActuel.donnees)) {
+                        const row = table.insertRow();
+                        const cellAction = row.insertCell(0);
+                        const cellScore = row.insertCell(1);
+                        cellAction.textContent = cle;
+                        cellScore.textContent = valeur;
+                    }
+                    container.appendChild(table);
+                }
+
+                // Afficher les sources scientifiques
+                const source = (noeudActuel.infos_science && noeudActuel.infos_science.source) 
+                               || noeudActuel.source_senorif;
+                if (source) {
+                    const infos = document.createElement('div');
+                    infos.className = 'infos-science';
+                    infos.innerHTML = `<strong>Source document :</strong> ${source}`;
+                    container.appendChild(infos);
+                }
+
+                // Bouton pour recommencer le questionnaire
+                const btnRecommencer = document.createElement('button');
+                btnRecommencer.className = 'btn-action';
+                btnRecommencer.textContent = 'Recommencer';
+                btnRecommencer.onclick = démarrerApplication;
+                container.appendChild(btnRecommencer);
+            }
+        }
+
+        // Lancement au chargement de la page
+        démarrerApplication();
+    </script>
+</body>
+</html>
