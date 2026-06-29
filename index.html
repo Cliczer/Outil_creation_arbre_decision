@@ -399,12 +399,44 @@ function autoLayout(){
       let c=place(e.target, depth+1);
       if(c) childXs.push(c.x);
     });
+    
+    // Position par défaut au centre des enfants
     n.x = childXs.length ? (Math.min(...childXs)+Math.max(...childXs))/2 : cursorX;
-    if(!childXs.length) cursorX += NODE_W + X_GAP;
+    
+    // --- BOUCLE ANTI-SUPERPOSITION ---
+    let overlap = true;
+    while(overlap) {
+        overlap = false;
+        nodes.forEach(other => {
+            // Si une autre case déjà placée est sur la même ligne (y)
+            if(other.id !== n.id && visited.has(other.id) && other.y === y) {
+                // Et qu'elle chevauche la position de notre case (x)
+                if(Math.abs(other.x - n.x) < NODE_W + 20) {
+                    // On décale notre case vers la droite
+                    n.x = Math.max(n.x, other.x + NODE_W + X_GAP);
+                    overlap = true;
+                }
+            }
+        });
+    }
+    // ---------------------------------
+
+    if(n.x >= cursorX) cursorX = n.x + NODE_W + X_GAP;
     n.y=y;
   }
   return n;
  }
+
+ roots.forEach(r=>place(r.id,0));
+ nodes.forEach(n=>{
+   if(!visited.has(n.id)){
+     n.x=cursorX; n.y=80;
+     cursorX += NODE_W + X_GAP;
+     visited.add(n.id);
+   }
+ });
+ resizeWorld();
+}
 
  roots.forEach(r=>place(r.id,0));
  nodes.forEach(n=>{
