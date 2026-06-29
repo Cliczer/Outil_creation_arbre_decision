@@ -155,9 +155,11 @@ details.listGroup[open]>summary::before{content:"▾ "}
 
 <div class="grp">
  <span class="grpLabel">📂 Charger arbre</span>
- <span class="grpBtns">
+ <span class="grpBtns" style="align-items:center">
+  <select id="protocolSelect" style="width:220px" onchange="loadSelectedProtocol()">
+   <option value="">── Protocole (registre Atlas) ──</option>
+  </select>
   <button onclick="document.getElementById('fileInput').click()">Depuis l'ordinateur</button>
-  <button onclick="reloadRealTree()">Depuis GitHub</button>
  </span>
 </div>
 
@@ -180,8 +182,9 @@ details.listGroup[open]>summary::before{content:"▾ "}
 </div>
 
 <div class="grp">
- <span class="grpLabel">💾 Enregistrer</span>
- <span class="grpBtns">
+ <span class="grpLabel">💾 Enregistrer <span class="hint" style="text-transform:none;font-weight:500">(nom de fichier dans <code>protocoles/</code>)</span></span>
+ <span class="grpBtns" style="align-items:center">
+  <input id="protocolFilename" placeholder="ex. diagnostic_biopsie.json" style="width:200px">
   <button class="primary" onclick="exportJSON()">Télécharger JSON</button>
   <button class="success" onclick="saveForGithub()">Vers GitHub</button>
  </span>
@@ -220,7 +223,7 @@ details.listGroup[open]>summary::before{content:"▾ "}
   7. Ctrl+Z pour annuler, Ctrl+Maj+Z pour rétablir.<br>
   8. Touche <b>Suppr</b> (ou Backspace hors champ texte) pour supprimer le nœud ou la branche sélectionné(e).
   </p>
-  <div class="notice"><b>Mise à jour GitHub :</b><br>1. Cliquez sur « Vers GitHub ».<br>2. Allez dans le dépôt GitHub de l'Atlas.<br>3. Supprimez l'ancien <code>arbre_dynamique.json</code>.<br>4. Ajoutez le fichier téléchargé.<br>5. Vérifiez qu'il s'appelle exactement <code>arbre_dynamique.json</code>.<br>6. Cliquez sur « Commit changes ».</div>
+  <div class="notice"><b>Mise à jour GitHub :</b><br>1. Choisissez le protocole à modifier dans le menu « Protocole (registre Atlas) » — il se charge directement depuis le dépôt de l'Atlas.<br>2. Modifiez l'arbre, puis cliquez sur « Vers GitHub » : le fichier est téléchargé sous son <b>nom d'origine</b> (ex. <code>diagnostic_biopsie.json</code>).<br>3. Allez dans le dépôt GitHub de l'Atlas, dossier <code>protocoles/</code>, remplacez ce fichier précis par celui téléchargé, puis « Commit changes ».<br><br><b>Nouveau protocole :</b> donnez-lui un nom de fichier dans le champ qui apparaît, téléchargez-le, ajoutez-le dans <code>protocoles/</code> sur GitHub, puis ajoutez une ligne dans <code>protocoles/index.json</code> (même dépôt) — c'est la seule liste que l'Atlas et cet éditeur lisent pour proposer les protocoles.</div>
   <hr class="divider">
   <b>Brouillon navigateur (sauvegarde temporaire, sans téléchargement) :</b>
   <div style="margin-top:8px;display:flex;gap:8px">
@@ -233,7 +236,7 @@ details.listGroup[open]>summary::before{content:"▾ "}
 
 <div class="main">
 <div class="panel">
-<div id="loadStatus" class="notice">Chargement de arbre_dynamique.json…</div>
+<div id="loadStatus" class="notice">Chargement du registre des protocoles…</div>
 
 <div class="legend">
  <span><i class="dot" style="background:#2563eb"></i> Question</span>
@@ -298,6 +301,9 @@ details.listGroup[open]>summary::before{content:"▾ "}
 </div>
 
 <script>
+// Seule adresse à changer si le dépôt de l'Atlas est déplacé ou renommé.
+const ATLAS_REPO_RAW_BASE = "https://raw.githubusercontent.com/Cliczer/Atlas-cancer-du-sein-/main/";
+
 let nodes=[], edges=[];
 let selectedNode=null, selectedEdge=null;
 let connectMode=false, connectSource=null;
@@ -306,6 +312,9 @@ let zoom=1;
 let lastSearchIndex=-1, lastSearchTerm="";
 let undoStack=[], redoStack=[];
 const HISTORY_LIMIT=100;
+
+let currentMetadata=null; // {titre, date_maj} du protocole chargé, conservé tel quel à l'export
+let protocolesRegistry=[]; // [{id, nom, fichier}] chargé depuis protocoles/index.json
 
 const NODE_W=240;
 const NODE_H=96;
@@ -336,6 +345,14 @@ function edgeLabelDisplay(e){
 function resultTitleFromData(t){
  let keys=Object.keys(t.donnees||{});
  return keys.length ? keys.map(k=>k.replace(/^OUT_/i,"")).join(", ") : "Recommandation";
+}
+
+// Les fichiers de protocole réels sont enveloppés en {metadata, tree}.
+// On accepte aussi un arbre brut (sans enveloppe) pour rester compatible avec d'anciens exports.
+function loadProtocolFile(data, filename){
+ currentMetadata = (data && data.tree) ? (data.metadata || {}) : {};
+ document.getElementById("protocolFilename").value = filename || "";
+ treeToGraph((data && data.tree) || data);
 }
 
 function treeToGraph(tree){
@@ -908,26 +925,76 @@ function toggleHelp(){
 document.getElementById("fileInput").addEventListener("change",function(ev){
  let f=ev.target.files[0]; if(!f)return;
  let r=new FileReader();
- r.onload=()=>{try{treeToGraph(JSON.parse(r.result));setStatus("Fichier JSON importé : "+f.name, true)}catch(e){alert("JSON invalide: "+e.message)}};
+ r.onload=()=>{try{loadProtocolFile(JSON.parse(r.result), f.name);setStatus("Fichier JSON importé : "+f.name, true)}catch(e){alert("JSON invalide: "+e.message)}};
  r.readAsText(f);
 });
 
+function currentExportFilename(){
+ let name=(document.getElementById("protocolFilename").value||"").trim();
+ if(!name) name="nouveau_protocole.json";
+ if(!/\.json$/i.test(name)) name+=".json";
+ return name;
+}
+
+function buildExportPayload(){
+ let metadata = Object.assign({titre:"", date_maj:""}, currentMetadata||{});
+ metadata.date_maj = new Date().toISOString().slice(0,10);
+ return {metadata: metadata, tree: graphToTree()};
+}
+
 function downloadTree(filename){
- let txt=JSON.stringify(graphToTree(),null,2);
+ let txt=JSON.stringify(buildExportPayload(),null,2);
  let blob=new Blob([txt],{type:"application/json;charset=utf-8"});
  let a=document.createElement("a");
  a.href=URL.createObjectURL(blob);
- a.download=filename || "arbre_dynamique.json";
+ a.download=filename;
  a.click();
  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-function exportJSON(){downloadTree("arbre_dynamique.json")}
+function exportJSON(){downloadTree(currentExportFilename())}
 function saveForGithub(){
- downloadTree("arbre_dynamique.json");
- alert("Le fichier arbre_dynamique.json a été téléchargé. Remplacez maintenant l'ancien fichier dans GitHub, puis commitez les changements.");
+ let filename=currentExportFilename();
+ downloadTree(filename);
+ alert("Le fichier "+filename+" a été téléchargé. Dans le dépôt GitHub de l'Atlas, remplacez le fichier protocoles/"+filename+" par celui-ci (ou ajoutez-le s'il est nouveau, puis ajoutez une ligne dans protocoles/index.json), puis commitez les changements.");
 }
-function saveLocal(){localStorage.setItem("arbre_senorif_editor",JSON.stringify({nodes,edges}));alert("Sauvegardé")}
-function loadLocal(){let s=localStorage.getItem("arbre_senorif_editor");if(!s)return alert("Pas de sauvegarde");let o=JSON.parse(s);nodes=o.nodes;edges=o.edges;render();setTimeout(fitView,50)}
+function saveLocal(){localStorage.setItem("arbre_senorif_editor",JSON.stringify({nodes,edges,currentMetadata,filename:document.getElementById("protocolFilename").value}));alert("Sauvegardé")}
+function loadLocal(){
+ let s=localStorage.getItem("arbre_senorif_editor");if(!s)return alert("Pas de sauvegarde");
+ let o=JSON.parse(s);nodes=o.nodes;edges=o.edges;currentMetadata=o.currentMetadata||{};
+ document.getElementById("protocolFilename").value=o.filename||"";
+ render();setTimeout(fitView,50);
+}
+
+function populateProtocolSelect(){
+ let sel=document.getElementById("protocolSelect");
+ sel.innerHTML='<option value="">── Protocole (registre Atlas) ──</option>';
+ protocolesRegistry.forEach(p=>{
+  let opt=document.createElement("option");
+  opt.value=p.fichier; opt.textContent=p.nom;
+  sel.appendChild(opt);
+ });
+}
+
+function loadRegistry(){
+ return fetch(ATLAS_REPO_RAW_BASE+"protocoles/index.json?_v="+Date.now())
+  .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+  .then(reg=>{ protocolesRegistry=(reg && reg.protocoles)||[]; populateProtocolSelect(); });
+}
+
+function loadSelectedProtocol(){
+ let filename=document.getElementById("protocolSelect").value;
+ if(!filename) return;
+ setStatus("Chargement de "+filename+"…", false);
+ fetch(ATLAS_REPO_RAW_BASE+"protocoles/"+filename+"?_v="+Date.now())
+  .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+  .then(data=>{
+   loadProtocolFile(data, filename);
+   setStatus("Protocole chargé depuis GitHub : "+filename, true);
+  })
+  .catch(err=>{
+   setStatus("Chargement impossible ("+err.message+"). Utilisez « Depuis l'ordinateur » pour charger le JSON à la main.", false);
+  });
+}
 function setZoom(z){
  zoom=Math.max(0.03,Math.min(2,z));
  document.getElementById("world").style.transform="scale("+zoom+")";
@@ -968,29 +1035,14 @@ function centerOnEdge(id){
  canvas.scrollTop=Math.max(0,(my-200)*zoom);
 }
 
-function reloadRealTree(){
- setStatus("Chargement de arbre_dynamique.json…", false);
- fetch("arbre_dynamique.json?_v="+Date.now())
-   .then(r=>{
-     if(!r.ok) throw new Error("HTTP "+r.status);
-     return r.json();
-   })
-   .then(tree=>{
-     treeToGraph(tree);
-     setStatus("Arbre chargé depuis arbre_dynamique.json.", true);
-   })
-   .catch(err=>{
-     console.warn("Impossible de charger arbre_dynamique.json :", err);
-     let msg = location.protocol==="file:"
-       ? "Chargement auto impossible : ce fichier est ouvert directement depuis l'ordinateur (file://), le navigateur bloque cet accès par sécurité. Ouvrez la page en ligne (GitHub Pages), ou utilisez « Depuis l'ordinateur » pour charger le JSON à la main."
-       : "Chargement auto impossible ("+err.message+"). Utilisez « Depuis l'ordinateur » pour charger le JSON à la main.";
-     setStatus(msg, false);
-   });
-}
-
 function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]))}
 
-reloadRealTree();
+setStatus("Chargement du registre des protocoles…", false);
+loadRegistry().then(()=>{
+ setStatus("Registre chargé : choisissez un protocole ci-dessus, ou importez un fichier depuis l'ordinateur.", true);
+}).catch(err=>{
+ setStatus("Impossible de charger le registre des protocoles ("+err.message+"). Utilisez « Depuis l'ordinateur » pour charger un fichier JSON à la main.", false);
+});
 </script>
 </body>
 </html>
