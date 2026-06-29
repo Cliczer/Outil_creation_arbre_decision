@@ -211,7 +211,7 @@ details.listGroup[open]>summary::before{content:"▾ "}
   1. Cliquez sur un nœud (ou une question de la liste à gauche, ou une réponse de son menu déplié) pour le modifier dans le panneau de droite.<br>
   2. Une fois vos modifications faites dans le panneau de droite, cliquez sur « Valider » pour les appliquer à l'arbre.<br>
   3. La forme de l'arbre est calculée automatiquement : vous ne pouvez pas déplacer un nœud à la main, elle se réorganise toute seule dès que vous ajoutez/supprimez un élément.<br>
-  4. <b>Question vs Étape :</b> Une <i>Question</i> peut avoir plusieurs réponses (branches). Une <i>Étape</i> n'a qu'une seule sortie (pas de texte sur la branche) et passe directement à la suite.<br>
+  4. <b>Question vs Étape :</b> Une <i>Question</i> peut avoir plusieurs réponses (branches). Une <i>Étape</i> permet soit une suite unique (flèche sans texte), soit de se diviser en plusieurs branches nommées (comme une question).<br>
   5. Si un nœud est sélectionné (en surbrillance), cliquer sur « + » crée directement le lien avec ce nœud. Sinon, utilisez « Relier deux nœuds » : cliquez le parent puis l'enfant.<br>
   6. Utilisez la barre de recherche pour retrouver un nœud par mot-clé : l'arbre se centre sur lui et le sélectionne pour modification immédiate.<br>
   7. Ctrl+Z pour annuler, Ctrl+Maj+Z pour rétablir.
@@ -279,7 +279,7 @@ details.listGroup[open]>summary::before{content:"▾ "}
     <button class="ghost" style="width:100%;margin-top:6px" onclick="addEdgeValueField()">+ Ajouter une valeur</button>
 </div>
 <div id="edgeEtapeNotice" style="display:none; margin-bottom: 16px;" class="notice">
-    Cette branche relie directement une étape à la suite du parcours. Aucune réponse (label) n'est requise.
+    Si l'étape a une seule suite, laissez vide. Si elle se divise, nommez la branche (ex: 'Bénin').
 </div>
 <button class="primary" style="width:100%;margin-top:16px" onclick="applyEdgeEdits()">✓ Valider la liaison</button>
 
@@ -321,10 +321,13 @@ function edge(id){return edges.find(e=>e.id===id)}
 
 function edgeValues(e){
  let vals=String((e&&e.label)||"").split(",").map(s=>s.trim()).filter(Boolean);
- return vals.length ? vals : ["Réponse"];
+ return vals;
 }
 function edgeLabelDisplay(e){
- return edgeValues(e).join(" / ");
+ let vals = edgeValues(e);
+ let s = node(e.source);
+ if(vals.length === 0) return (s && s.type==="etape") ? "" : "Réponse";
+ return vals.join(" / ");
 }
 
 function resultTitleFromData(t){
@@ -354,8 +357,13 @@ function treeToGraph(tree){
 
   if(parent) edges.push({id:uid("e"),source:parent,target:id,label:label||""});
   
-  if (t.type === "etape" && t.suite) {
-      walk(t.suite, id, "");
+  if (t.type === "etape") {
+      if (t.suite) {
+          walk(t.suite, id, "");
+      }
+      if (t.choix) {
+          Object.entries(t.choix).forEach(([lab,child])=>walk(child, id, lab));
+      }
   } else if (t.type !== "resultat" && t.choix) {
       Object.entries(t.choix).forEach(([lab,child])=>walk(child, id, lab));
   }
@@ -421,23 +429,45 @@ function graphToTree(){
     infos_science:n.infos_science||{},
     source_senorif:n.source_senorif||""
   };
+  
   if(n.type==="etape") {
     let outEdges=edges.filter(e=>e.source===n.id);
-    let suiteNode=outEdges.length ? build(node(outEdges[0].target)) : null;
-    return {
-        type:"etape",
-        titre:n.titre||"Étape sans titre",
-        suite:suiteNode,
-        infos_science:n.infos_science||{},
-        source_senorif:n.source_senorif||""
-    };
+    if (outEdges.length === 1 && edgeValues(outEdges[0]).length === 0) {
+        return {
+            type:"etape",
+            titre:n.titre||"Étape sans titre",
+            suite: build(node(outEdges[0].target)),
+            infos_science:n.infos_science||{},
+            source_senorif:n.source_senorif||""
+        };
+    } else {
+        let choix={};
+        outEdges.forEach((e, index)=>{
+          let child=node(e.target);
+          if(!child) return;
+          let subtree=build(child);
+          let vals = edgeValues(e);
+          if(vals.length === 0) vals = ["Branche " + (index+1)];
+          vals.forEach(v=>choix[v]=subtree);
+        });
+        return {
+            type:"etape",
+            titre:n.titre||"Étape sans titre",
+            choix: choix,
+            infos_science:n.infos_science||{},
+            source_senorif:n.source_senorif||""
+        };
+    }
   }
+
   let choix={};
-  edges.filter(e=>e.source===n.id).forEach(e=>{
+  edges.filter(e=>e.source===n.id).forEach((e, index)=>{
     let child=node(e.target);
     if(!child) return;
     let subtree=build(child);
-    edgeValues(e).forEach(v=>choix[v]=subtree);
+    let vals = edgeValues(e);
+    if(vals.length === 0) vals = ["Réponse " + (index+1)];
+    vals.forEach(v=>choix[v]=subtree);
   });
   return {
     type:n.type||"question",
@@ -564,7 +594,7 @@ function renderEdge(e){
  
  let lab=document.createElement("div");
  lab.className="label"+(sel?" selected":""); 
- if(isEtape){
+ if(isEtape && edgeValues(e).length === 0){
      lab.style.left=((x1+x2)/2-15)+"px"; 
      lab.style.top=((y1+y2)/2-10)+"px"; 
      lab.style.padding = "2px 6px";
@@ -580,7 +610,12 @@ function renderEdge(e){
 
 function summary(n){
  if(n.type==="resultat"){let k=Object.keys(n.donnees||{});return k.length?k.slice(0,3).join(", "):"(vide)"}
- if(n.type==="etape"){let out=edges.filter(e=>e.source===n.id);return out.length?("→ "+(node(out[0].target)?.titre||"?")):"(aucune suite)"}
+ if(n.type==="etape"){
+     let out=edges.filter(e=>e.source===n.id);
+     if (out.length === 1 && edgeValues(out[0]).length === 0) return "→ "+(node(out[0].target)?.titre||"?");
+     if (out.length > 0) return out.map(edgeLabelDisplay).join("  •  ");
+     return "(aucune suite)";
+ }
  let out=edges.filter(e=>e.source===n.id);return out.length?out.map(edgeLabelDisplay).join("  •  "):"(aucune réponse)"
 }
 
@@ -614,8 +649,8 @@ function buildQuestionRow(n){
   let row=document.createElement("div");
   row.className="listRow"+(selectedEdge===e.id?" sel":"");
   row.style.marginLeft="14px"; row.style.borderLeftColor="#f59e0b";
-  let labelDisplay = n.type === "etape" ? "Suite" : edgeLabelDisplay(e);
-  row.textContent="↳ "+(n.type==="etape"?"":"« "+labelDisplay+" » → ")+(child?(child.titre||"(sans titre)"):"?");
+  let labelDisplay = (n.type === "etape" && edgeValues(e).length === 0) ? "Suite" : edgeLabelDisplay(e);
+  row.textContent="↳ "+((n.type==="etape" && edgeValues(e).length === 0)?"":"« "+labelDisplay+" » → ")+(child?(child.titre||"(sans titre)"):"?");
   row.onclick=function(ev){
    ev.stopPropagation();
    selectedEdge=e.id; selectedNode=null;
@@ -644,15 +679,14 @@ function renderEditor(){
   document.getElementById("editSource").value=n.source_senorif||"";
  }
  if(e){
+  document.getElementById("edgeValuesWrapper").style.display="block";
   let s=node(e.source);
   if(s && s.type==="etape"){
-      document.getElementById("edgeValuesWrapper").style.display="none";
       document.getElementById("edgeEtapeNotice").style.display="block";
   } else {
-      document.getElementById("edgeValuesWrapper").style.display="block";
       document.getElementById("edgeEtapeNotice").style.display="none";
-      renderEdgeValueFields(edgeValues(e));
   }
+  renderEdgeValueFields(edgeValues(e));
  }
 }
 
@@ -731,14 +765,9 @@ function applyNodeEdits(){
 function applyEdgeEdits(){
  let e=edge(selectedEdge); if(!e) return;
  pushHistory();
- let s = node(e.source);
- if(s && s.type === "etape"){
-     e.label = "";
- } else {
-     let inputs=document.getElementById("editEdgeValues").querySelectorAll("input");
-     let vals=Array.from(inputs).map(i=>i.value.trim()).filter(Boolean);
-     e.label=vals.join(", ");
- }
+ let inputs=document.getElementById("editEdgeValues").querySelectorAll("input");
+ let vals=Array.from(inputs).map(i=>i.value.trim()).filter(Boolean);
+ e.label=vals.join(", ");
  render();
 }
 
@@ -747,7 +776,6 @@ function addNodeLinkedToSelection(newNode){
  nodes.push(newNode);
  if(parentId && node(parentId)) {
      if(node(parentId).type === "etape") {
-         edges = edges.filter(e => e.source !== parentId); // L'étape n'a qu'une seule sortie
          edges.push({id:uid("e"),source:parentId,target:newNode.id,label:""});
      } else {
          edges.push({id:uid("e"),source:parentId,target:newNode.id,label:"Réponse"});
@@ -768,7 +796,6 @@ function connectClick(id){
         pushHistory();
         let s = node(connectSource);
         if(s && s.type === "etape") {
-            edges = edges.filter(e => e.source !== connectSource); // Remplace la liaison existante
             edges.push({id:uid("e"),source:connectSource,target:id,label:""});
         } else {
             edges.push({id:uid("e"),source:connectSource,target:id,label:"Réponse"});
