@@ -267,6 +267,11 @@ details.listGroup[open]>summary::before{content:"▾ "}
 <label>Titre (Question, étape ou nom reco)</label>
 <textarea id="editTitle" style="min-height:60px"></textarea>
 
+<div id="critereWrap">
+<label>Critère clinique relié <span class="hint" style="text-transform:none;font-weight:500">(optionnel — relie cette question au vocabulaire des études)</span></label>
+<select id="editCritere"><option value="">— Aucun —</option></select>
+</div>
+
 <label style="display: none;">Données recommandation JSON</label>
 <textarea id="editData" class="json" style="display: none;"></textarea>
 
@@ -286,6 +291,11 @@ details.listGroup[open]>summary::before{content:"▾ "}
 </div>
 <div id="edgeEtapeNotice" style="display:none; margin-bottom: 16px;" class="notice">
     Si l'étape a une seule suite, laissez vide. Si elle se divise, nommez la branche (ex: 'Bénin').
+</div>
+<div id="edgeValeurWrap" style="display:none;">
+    <label>Valeur canonique de cette réponse <span class="hint" style="text-transform:none;font-weight:500">(pour le matching avec les études)</span></label>
+    <select id="editEdgeValeurSelect"><option value="">— Aucune —</option></select>
+    <input id="editEdgeValeurInput" style="display:none;" placeholder="Valeur numérique (ex. 40)">
 </div>
 <button class="primary" style="width:100%;margin-top:16px" onclick="applyEdgeEdits()">✓ Valider la liaison</button>
 
@@ -315,6 +325,7 @@ const HISTORY_LIMIT=100;
 
 let currentMetadata=null; // {titre, date_maj} du protocole chargé, conservé tel quel à l'export
 let protocolesRegistry=[]; // [{id, nom, fichier}] chargé depuis protocoles/index.json
+let criteresSchema={};     // {id:{label,type,valeurs}} chargé depuis schema_criteres.json (contrat partagé Atlas)
 
 const NODE_W=240;
 const NODE_H=96;
@@ -360,7 +371,7 @@ function treeToGraph(tree){
  nodes=[]; edges=[];
  let count=1;
 
- function walk(t, parent, label){
+ function walk(t, parent, label, parentReponses){
   if(!t) return null;
   let id="n"+count++;
 
@@ -368,6 +379,7 @@ function treeToGraph(tree){
     id:id,
     type:t.type||"question",
     titre:t.titre || (t.type==="resultat" ? resultTitleFromData(t) : ""),
+    critere:t.critere||"",
     donnees:t.donnees||{},
     infos_science:t.infos_science||{},
     source_senorif:t.source_senorif || (t.infos_science && t.infos_science.source) || "",
@@ -375,17 +387,20 @@ function treeToGraph(tree){
     y:0
   });
 
-  if(parent) edges.push({id:uid("e"),source:parent,target:id,label:label||""});
-  
+  if(parent) edges.push({
+    id:uid("e"), source:parent, target:id, label:label||"",
+    valeur:(parentReponses && parentReponses[label]!==undefined) ? parentReponses[label] : ""
+  });
+
   if (t.type === "etape") {
       if (t.suite) {
-          walk(t.suite, id, "");
+          walk(t.suite, id, "", t.reponses);
       }
       if (t.choix) {
-          Object.entries(t.choix).forEach(([lab,child])=>walk(child, id, lab));
+          Object.entries(t.choix).forEach(([lab,child])=>walk(child, id, lab, t.reponses));
       }
   } else if (t.type !== "resultat" && t.choix) {
-      Object.entries(t.choix).forEach(([lab,child])=>walk(child, id, lab));
+      Object.entries(t.choix).forEach(([lab,child])=>walk(child, id, lab, t.reponses));
   }
   return id;
  }
@@ -468,49 +483,57 @@ function graphToTree(){
   if(n.type==="etape") {
     let outEdges=edges.filter(e=>e.source===n.id);
     if (outEdges.length === 1 && edgeValues(outEdges[0]).length === 0) {
-        return {
+        let out={
             type:"etape",
             titre:n.titre||"Étape sans titre",
             suite: build(node(outEdges[0].target)),
             infos_science:n.infos_science||{},
             source_senorif:n.source_senorif||""
         };
+        if(n.critere) out.critere=n.critere;
+        return out;
     } else {
-        let choix={};
+        let choix={}, reponses={};
         outEdges.forEach((e, index)=>{
           let child=node(e.target);
           if(!child) return;
           let subtree=build(child);
           let vals = edgeValues(e);
           if(vals.length === 0) vals = ["Branche " + (index+1)];
-          vals.forEach(v=>choix[v]=subtree);
+          vals.forEach(v=>{ choix[v]=subtree; if(e.valeur) reponses[v]=e.valeur; });
         });
-        return {
+        let out={
             type:"etape",
             titre:n.titre||"Étape sans titre",
             choix: choix,
             infos_science:n.infos_science||{},
             source_senorif:n.source_senorif||""
         };
+        if(n.critere) out.critere=n.critere;
+        if(n.critere && Object.keys(reponses).length) out.reponses=reponses;
+        return out;
     }
   }
 
-  let choix={};
+  let choix={}, reponses={};
   edges.filter(e=>e.source===n.id).forEach((e, index)=>{
     let child=node(e.target);
     if(!child) return;
     let subtree=build(child);
     let vals = edgeValues(e);
     if(vals.length === 0) vals = ["Réponse " + (index+1)];
-    vals.forEach(v=>choix[v]=subtree);
+    vals.forEach(v=>{ choix[v]=subtree; if(e.valeur) reponses[v]=e.valeur; });
   });
-  return {
+  let out={
     type:n.type||"question",
     titre:n.titre||"Question sans titre",
     choix:choix,
     infos_science:n.infos_science||{},
     source_senorif:n.source_senorif||""
   };
+  if(n.critere) out.critere=n.critere;
+  if(n.critere && Object.keys(reponses).length) out.reponses=reponses;
+  return out;
  }
  return build(root);
 }
@@ -715,6 +738,8 @@ function renderEditor(){
   document.getElementById("editTitle").value=n.titre||"";
   document.getElementById("editData").value=JSON.stringify(n.donnees||{},null,2);
   document.getElementById("editSource").value=n.source_senorif||"";
+  document.getElementById("critereWrap").style.display = n.type==="resultat" ? "none" : "block";
+  populateCritereSelect(n.critere||"");
  }
  if(e){
   document.getElementById("edgeValuesWrapper").style.display="block";
@@ -725,6 +750,45 @@ function renderEditor(){
       document.getElementById("edgeEtapeNotice").style.display="none";
   }
   renderEdgeValueFields(edgeValues(e));
+  populateEdgeValeur(e);
+ }
+}
+
+// Menu déroulant « Critère » : liste les critères canoniques du contrat partagé.
+function populateCritereSelect(selected){
+ let sel=document.getElementById("editCritere");
+ sel.innerHTML='<option value="">— Aucun —</option>';
+ Object.keys(criteresSchema).forEach(id=>{
+  let o=document.createElement("option");
+  o.value=id;
+  o.textContent=(criteresSchema[id].label||id)+" ("+id+")";
+  sel.appendChild(o);
+ });
+ if(selected && !criteresSchema[selected]){
+  let o=document.createElement("option"); o.value=selected; o.textContent=selected+" (hors schéma)"; sel.appendChild(o);
+ }
+ sel.value=selected||"";
+}
+
+// Contrôle « Valeur canonique » d'une réponse : dépend du critère porté par la question parente.
+function populateEdgeValeur(e){
+ let src=node(e.source);
+ let wrap=document.getElementById("edgeValeurWrap");
+ let selEl=document.getElementById("editEdgeValeurSelect");
+ let inpEl=document.getElementById("editEdgeValeurInput");
+ if(!src || !src.critere){ wrap.style.display="none"; return; }
+ wrap.style.display="block";
+ let def=criteresSchema[src.critere];
+ if(def && def.type==="numerique"){
+  selEl.style.display="none"; inpEl.style.display="block";
+  inpEl.value=e.valeur||"";
+ } else {
+  inpEl.style.display="none"; selEl.style.display="block";
+  selEl.innerHTML='<option value="">— Aucune —</option>';
+  let vals=(def && def.valeurs) || [];
+  vals.forEach(v=>{ let o=document.createElement("option"); o.value=v; o.textContent=v; selEl.appendChild(o); });
+  if(e.valeur && vals.indexOf(e.valeur)===-1){ let o=document.createElement("option"); o.value=e.valeur; o.textContent=e.valeur+" (hors schéma)"; selEl.appendChild(o); }
+  selEl.value=e.valeur||"";
  }
 }
 
@@ -801,6 +865,7 @@ function applyNodeEdits(){
  pushHistory();
  n.type=document.getElementById("editType").value;
  n.titre=capFirst(document.getElementById("editTitle").value);
+ n.critere=document.getElementById("editCritere").value;
  n.source_senorif=document.getElementById("editSource").value;
  try{
   n.donnees=JSON.parse(document.getElementById("editData").value||"{}");
@@ -816,6 +881,15 @@ function applyEdgeEdits(){
  let inputs=document.getElementById("editEdgeValues").querySelectorAll("input");
  let vals=Array.from(inputs).map(i=>i.value.trim()).filter(Boolean);
  e.label=vals.join(", ");
+ let src=node(e.source);
+ if(src && src.critere){
+  let def=criteresSchema[src.critere];
+  e.valeur=(def && def.type==="numerique")
+   ? document.getElementById("editEdgeValeurInput").value.trim()
+   : document.getElementById("editEdgeValeurSelect").value;
+ } else {
+  e.valeur="";
+ }
  render();
 }
 
@@ -981,6 +1055,16 @@ function loadRegistry(){
   .then(reg=>{ protocolesRegistry=(reg && reg.protocoles)||[]; populateProtocolSelect(); });
 }
 
+// Contrat partagé : vocabulaire canonique des critères, lu depuis le dépôt Atlas.
+// Sert à proposer aux médecins des menus déroulants « Critère » et « Valeur canonique »
+// pour relier une question/réponse au vocabulaire des études, sans toucher au code.
+function loadSchemaCriteres(){
+ return fetch(ATLAS_REPO_RAW_BASE+"schema_criteres.json?_v="+Date.now())
+  .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+  .then(s=>{ criteresSchema=(s && s.criteres)||{}; })
+  .catch(err=>{ console.warn("schema_criteres.json non chargé :", err.message); criteresSchema={}; });
+}
+
 function loadSelectedProtocol(){
  let filename=document.getElementById("protocolSelect").value;
  if(!filename) return;
@@ -1038,6 +1122,7 @@ function centerOnEdge(id){
 function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]))}
 
 setStatus("Chargement du registre des protocoles…", false);
+loadSchemaCriteres();
 loadRegistry().then(()=>{
  setStatus("Registre chargé : choisissez un protocole ci-dessus, ou importez un fichier depuis l'ordinateur.", true);
 }).catch(err=>{
